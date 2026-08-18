@@ -1,0 +1,101 @@
+{
+  "aggregate": {
+    "faithfulness": 0.5599999999999999,
+    "answer_relevancy": 0.5662127274721014,
+    "context_precision": 0.791666666602778,
+    "context_recall": 0.8
+  },
+  "num_questions": 20,
+  "failures": [
+    {
+      "question": "Nhân viên được nghỉ bao nhiêu ngày khi kết hôn?",
+      "answer": "3 ngày làm việc.",
+      "worst_metric": "faithfulness",
+      "score": NaN,
+      "avg_score": NaN,
+      "diagnosis": "LLM hallucinating",
+      "suggested_fix": "Tighten prompt, lower temperature"
+    },
+    {
+      "question": "Bảo hiểm sức khỏe PVI có hạn mức bao nhiêu cho nhân viên?",
+      "answer": "Hạn mức bảo hiểm sức khỏe PVI cho nhân viên là **200.000.000 VNĐ/năm**.",
+      "worst_metric": "faithfulness",
+      "score": NaN,
+      "avg_score": NaN,
+      "diagnosis": "LLM hallucinating",
+      "suggested_fix": "Tighten prompt, lower temperature"
+    },
+    {
+      "question": "Muốn mua thiết bị trị giá 55 triệu cần ai phê duyệt?",
+      "answer": "Không tìm thấy.",
+      "worst_metric": "faithfulness",
+      "score": 0.0,
+      "avg_score": 0.0,
+      "diagnosis": "LLM hallucinating",
+      "suggested_fix": "Tighten prompt, lower temperature"
+    },
+    {
+      "question": "Bao lâu phải đổi mật khẩu một lần?",
+      "answer": "Không tìm thấy.",
+      "worst_metric": "faithfulness",
+      "score": 0.0,
+      "avg_score": 0.33333333332291665,
+      "diagnosis": "LLM hallucinating",
+      "suggested_fix": "Tighten prompt, lower temperature"
+    },
+    {
+      "question": "Thâm niên bao nhiêu năm thì được cộng thêm ngày phép?",
+      "answer": "Không tìm thấy.",
+      "worst_metric": "faithfulness",
+      "score": 0.0,
+      "avg_score": 0.499999999975,
+      "diagnosis": "LLM hallucinating",
+      "suggested_fix": "Tighten prompt, lower temperature"
+    },
+    {
+      "question": "Nhân viên tạm ứng 15 triệu, sau 20 ngày mới thanh toán. Bị phạt bao nhiêu?",
+      "answer": "Bị phạt **300.000 VNĐ** (2 % của 15 triệu đồng).",
+      "worst_metric": "faithfulness",
+      "score": 0.0,
+      "avg_score": 0.6723433137691209,
+      "diagnosis": "LLM hallucinating",
+      "suggested_fix": "Tighten prompt, lower temperature"
+    },
+    {
+      "question": "Có cần kích hoạt xác thực đa yếu tố (MFA) không?",
+      "answer": "Có, tất cả nhân viên **bắt buộc** kích hoạt xác thực đa yếu tố (MFA) cho tài khoản email, VPN và các hệ thống nội bộ.",
+      "worst_metric": "context_recall",
+      "score": 0.5,
+      "avg_score": 0.7880214796886778,
+      "diagnosis": "Missing relevant chunks",
+      "suggested_fix": "Improve chunking or add BM25"
+    },
+    {
+      "question": "Nhân viên được nghỉ bao nhiêu ngày phép năm?",
+      "answer": "Nhân viên được nghỉ **15 ngày phép năm**.",
+      "worst_metric": "context_precision",
+      "score": 0.49999999995,
+      "avg_score": 0.8434855891326934,
+      "diagnosis": "Too many irrelevant chunks",
+      "suggested_fix": "Add reranking or metadata filter"
+    },
+    {
+      "question": "Nhân viên thử việc có được nghỉ phép năm không?",
+      "answer": "Không được nghỉ phép năm.",
+      "worst_metric": "answer_relevancy",
+      "score": 0.7218872784038382,
+      "avg_score": 0.9304718195759596,
+      "diagnosis": "Answer doesn't match question",
+      "suggested_fix": "Improve prompt template"
+    },
+    {
+      "question": "Phụ cấp ăn trưa hàng tháng là bao nhiêu?",
+      "answer": "1.000.000 VNĐ/tháng.",
+      "worst_metric": "answer_relevancy",
+      "score": 0.7667292899497936,
+      "avg_score": 0.9416823224624484,
+      "diagnosis": "Answer doesn't match question",
+      "suggested_fix": "Improve prompt template"
+    }
+  ]
+}

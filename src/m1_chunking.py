@@ -10,6 +10,7 @@ Test: pytest tests/test_m1.py
 """
 
 import os, sys, glob, re
+from collections import Counter
 from dataclasses import dataclass, field
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -87,20 +88,70 @@ def chunk_semantic(text: str, threshold: float = SEMANTIC_THRESHOLD,
     Split text by sentence similarity — nhóm câu cùng chủ đề.
     Tốt hơn basic vì không cắt giữa ý.
     """
-    # TODO: Implement semantic chunking
-    # 1. from sentence_transformers import SentenceTransformer
-    #    from numpy import dot
-    #    from numpy.linalg import norm
-    # 2. metadata = metadata or {}
-    # 3. Split text thành sentences: re.split(r'(?<=[.!?])\s+|\n\n', text)
-    # 4. model = SentenceTransformer("all-MiniLM-L6-v2")
-    #    embeddings = model.encode(sentences)
-    # 5. cosine_sim(a, b) = dot(a, b) / (norm(a) * norm(b) + 1e-9)
-    # 6. Duyệt từ sentence[1]:
-    #      - sim(embedding[i-1], embedding[i]) < threshold → tách chunk mới
-    #      - else: gộp vào chunk hiện tại
-    # 7. Return [Chunk(text=joined_group, metadata={..., "strategy": "semantic"})]
-    return []
+    if not text or not text.strip():
+        return []
+
+    metadata = metadata or {}
+    sentences = [
+        part.strip()
+        for part in re.split(r"(?<=[.!?])\s+|\n{2,}", text)
+        if part.strip()
+    ]
+    if not sentences:
+        return []
+
+    # Load lazily and use only a cached model so chunking never depends on
+    # network availability.
+    embeddings = None
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        model = SentenceTransformer(
+            "all-MiniLM-L6-v2", local_files_only=True
+        )
+        embeddings = model.encode(sentences)
+    except Exception:
+        # Token-count vectors are a deterministic cosine-similarity fallback
+        # when sentence-transformers or its model is unavailable.
+        vocabulary = sorted({
+            token
+            for sentence in sentences
+            for token in re.findall(r"\w+", sentence.lower(), re.UNICODE)
+        })
+        positions = {token: index for index, token in enumerate(vocabulary)}
+        embeddings = []
+        for sentence in sentences:
+            vector = [0.0] * len(vocabulary)
+            tokens = re.findall(r"\w+", sentence.lower(), re.UNICODE)
+            for token, count in Counter(tokens).items():
+                vector[positions[token]] = float(count)
+            embeddings.append(vector)
+
+    def cosine_similarity(left, right) -> float:
+        numerator = sum(float(a) * float(b) for a, b in zip(left, right))
+        left_norm = sum(float(a) * float(a) for a in left) ** 0.5
+        right_norm = sum(float(b) * float(b) for b in right) ** 0.5
+        return numerator / (left_norm * right_norm + 1e-9)
+
+    groups = [[sentences[0]]]
+    for index in range(1, len(sentences)):
+        similarity = cosine_similarity(embeddings[index - 1], embeddings[index])
+        if similarity < threshold:
+            groups.append([])
+        groups[-1].append(sentences[index])
+
+    return [
+        Chunk(
+            text="\n\n".join(group).strip(),
+            metadata={
+                **metadata,
+                "strategy": "semantic",
+                "chunk_index": index,
+            },
+        )
+        for index, group in enumerate(groups)
+        if group
+    ]
 
 
 # ─── Strategy 2: Hierarchical Chunking ──────────────────
@@ -116,16 +167,87 @@ def chunk_hierarchical(text: str, parent_size: int = HIERARCHICAL_PARENT_SIZE,
     Returns:
         (parents, children) — mỗi child có parent_id link đến parent.
     """
-    # TODO: Implement hierarchical chunking
-    # 1. metadata = metadata or {}
-    # 2. Split text bằng "\n\n" → paragraphs
-    # 3. Gộp paragraphs thành parent chunks (mỗi parent ≤ parent_size chars):
-    #      pid = f"parent_{len(parents)}"
-    #      parents.append(Chunk(text=..., metadata={..., "chunk_type": "parent", "parent_id": pid}))
-    # 4. Mỗi parent → split thành children (mỗi child ≤ child_size chars):
-    #      children.append(Chunk(text=..., metadata={..., "chunk_type": "child"}, parent_id=pid))
-    # 5. return (parents, children)
-    return ([], [])
+    if not text or not text.strip():
+        return ([], [])
+    if parent_size <= 0 or child_size <= 0:
+        raise ValueError("parent_size and child_size must be positive")
+
+    metadata = metadata or {}
+
+    def split_to_limit(value: str, limit: int) -> list[str]:
+        """Split on paragraphs/words while guaranteeing a character limit."""
+        value = value.strip()
+        if not value:
+            return []
+        paragraphs = [
+            part.strip()
+            for part in re.split(r"\n{2,}", value)
+            if part.strip()
+        ]
+        pieces: list[str] = []
+        current = ""
+        for paragraph in paragraphs:
+            candidate = f"{current}\n\n{paragraph}" if current else paragraph
+            if len(candidate) <= limit:
+                current = candidate
+                continue
+            if current:
+                pieces.append(current.strip())
+                current = ""
+            if len(paragraph) <= limit:
+                current = paragraph
+                continue
+
+            for word in paragraph.split():
+                if len(word) > limit:
+                    if current:
+                        pieces.append(current.strip())
+                        current = ""
+                    pieces.extend(
+                        word[offset:offset + limit]
+                        for offset in range(0, len(word), limit)
+                    )
+                    continue
+                candidate = f"{current} {word}" if current else word
+                if len(candidate) <= limit:
+                    current = candidate
+                else:
+                    pieces.append(current.strip())
+                    current = word
+        if current:
+            pieces.append(current.strip())
+        return pieces
+
+    parents: list[Chunk] = []
+    children: list[Chunk] = []
+    for parent_text in split_to_limit(text, parent_size):
+        parent_id = f"parent_{len(parents)}"
+        parents.append(Chunk(
+            text=parent_text,
+            metadata={
+                **metadata,
+                "strategy": "hierarchical",
+                "chunk_type": "parent",
+                "parent_id": parent_id,
+                "chunk_index": len(parents),
+            },
+            parent_id=parent_id,
+        ))
+        for child_index, child_text in enumerate(
+            split_to_limit(parent_text, child_size)
+        ):
+            children.append(Chunk(
+                text=child_text,
+                metadata={
+                    **metadata,
+                    "strategy": "hierarchical",
+                    "chunk_type": "child",
+                    "parent_id": parent_id,
+                    "chunk_index": child_index,
+                },
+                parent_id=parent_id,
+            ))
+    return parents, children
 
 
 # ─── Strategy 3: Structure-Aware Chunking ────────────────
@@ -136,14 +258,55 @@ def chunk_structure_aware(text: str, metadata: dict | None = None) -> list[Chunk
     Parse markdown headers → chunk theo logical structure.
     Giữ nguyên tables, code blocks, lists — không cắt giữa chừng.
     """
-    # TODO: Implement structure-aware chunking
-    # 1. metadata = metadata or {}
-    # 2. sections = re.split(r'(^#{1,3}\s+.+$)', text, flags=re.MULTILINE)
-    # 3. Duyệt sections:
-    #      - Nếu match header (^#{1,3}\s+): lưu header hiện tại, tạo chunk cho content trước đó
-    #      - Else: gộp vào content hiện tại
-    # 4. Return [Chunk(text=header+content, metadata={..., "section": header, "strategy": "structure"})]
-    return []
+    if not text or not text.strip():
+        return []
+
+    metadata = metadata or {}
+    sections: list[tuple[str, list[str]]] = []
+    current_header = ""
+    current_lines: list[str] = []
+    fence_marker: str | None = None
+    header_pattern = re.compile(r"^#{1,3}\s+.+$")
+
+    for line in text.splitlines():
+        fence_match = re.match(r"^\s*(?:\x60{3,}|~{3,})", line)
+        if fence_match:
+            marker = "~" if "~" in fence_match.group(0) else "\x60"
+            if fence_marker is None:
+                fence_marker = marker
+            elif marker == fence_marker:
+                fence_marker = None
+
+        is_header = (
+            fence_marker is None
+            and bool(header_pattern.match(line.strip()))
+        )
+        if is_header:
+            if current_lines and "\n".join(current_lines).strip():
+                sections.append((current_header, current_lines))
+            current_header = line.strip()
+            current_lines = [line.rstrip()]
+        else:
+            current_lines.append(line.rstrip())
+
+    if current_lines and "\n".join(current_lines).strip():
+        sections.append((current_header, current_lines))
+
+    chunks: list[Chunk] = []
+    for index, (header, lines) in enumerate(sections):
+        section_text = "\n".join(lines).strip()
+        if not section_text:
+            continue
+        chunks.append(Chunk(
+            text=section_text,
+            metadata={
+                **metadata,
+                "strategy": "structure",
+                "section": header or "preamble",
+                "chunk_index": index,
+            },
+        ))
+    return chunks
 
 
 # ─── A/B Test: Compare All Strategies ────────────────────

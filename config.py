@@ -6,7 +6,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- API Keys ---
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+GROQ_LLM_MODEL = "openai/gpt-oss-20b"
 
 # --- Qdrant ---
 QDRANT_HOST = "localhost"
