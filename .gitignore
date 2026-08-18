@@ -6,5 +6,7 @@ __pycache__/
 qdrant_data/
 *.egg-info/
 reports/*.json
+!reports/ragas_report.json
+!reports/naive_baseline_report.json
 .venv/
 pipeline_run.log
